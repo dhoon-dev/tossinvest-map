@@ -15,17 +15,29 @@ Recommended controls:
 - network allowlisting
 - private tunnel for development
 - optional static bearer-token checks for clients that can send headers
+- OAuth resource-server mode for ChatGPT Apps/Connectors
 
-## Multi-User OAuth
+## OAuth Resource Server
 
-Multi-user OAuth is not implemented in milestone 1. A complete implementation must:
+OAuth mode validates JWT access tokens from an external authorization server. The app
+does not host login, consent, authorization, token, registration, or revocation
+endpoints. Configure your authorization server separately, then run:
 
-- isolate credentials and sessions per user
-- implement OAuth 2.1 according to OpenAI Apps SDK and MCP authorization guidance
-- verify access tokens on every request
-- map each authenticated user to the correct TossInvest credential or session
-- store refresh tokens or user secrets only with an explicit secure storage design
-- fail closed when OAuth is configured but incomplete
+```bash
+uv run tossinvest-mcp-remote serve-http \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --oauth-issuer-url "https://auth.example.com/realms/tossinvest" \
+  --oauth-resource-url "https://your-domain.example/mcp" \
+  --oauth-jwks-uri "https://auth.example.com/realms/tossinvest/protocol/openid-connect/certs" \
+  --oauth-required-scope "tossinvest:read" \
+  --oauth-allowed-email "you@example.com"
+```
+
+The server rejects missing or invalid bearer tokens, validates issuer and audience,
+fetches JWKS with a short cache, and enforces configured scopes. If you need true
+multi-user TossInvest access later, add a separate design that maps each authenticated
+subject to isolated TossInvest credentials.
 
 ## Internal HTTP
 

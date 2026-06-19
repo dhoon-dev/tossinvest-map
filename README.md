@@ -100,13 +100,30 @@ For public HTTP deployments, use HTTPS plus access control:
 - network allowlisting
 - private tunnel for development
 - optional static bearer-token check for clients that can send `Authorization`
+- OAuth 2.1 resource-server mode for ChatGPT Apps/Connectors
 
-Do not assume static bearer-token authentication works with ChatGPT unless you have
-verified it against the current ChatGPT Apps/Connectors UI and documentation.
+For ChatGPT Apps/Connectors, prefer OAuth resource-server mode with an external
+authorization server such as Keycloak, Zitadel, Auth0, or Ory Hydra:
 
-Multi-user OAuth is not implemented in milestone 1. A future OAuth mode must isolate
-per-user credentials and sessions, verify access tokens on every request, and fail
-closed if OAuth is incomplete.
+```bash
+uv run tossinvest-mcp-remote serve-http \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --trusted-proxy "10.0.0.0/8" \
+  --client-id-command "cat /run/secrets/tossinvest_client_id" \
+  --client-secret-command "cat /run/secrets/tossinvest_client_secret" \
+  --account "12345678901" \
+  --oauth-issuer-url "https://auth.example.com/realms/tossinvest" \
+  --oauth-resource-url "https://your-domain.example/mcp" \
+  --oauth-jwks-uri "https://auth.example.com/realms/tossinvest/protocol/openid-connect/certs" \
+  --oauth-audience "https://your-domain.example/mcp" \
+  --oauth-required-scope "tossinvest:read" \
+  --oauth-allowed-email "you@example.com"
+```
+
+This server verifies OAuth access tokens on every `/mcp` request but does not issue
+tokens itself. Keep using one server instance per TossInvest credential set unless you
+also add a separate per-user TossInvest credential mapping layer.
 
 ## Accounts
 

@@ -17,6 +17,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .config import TossInvestRemoteServerConfig
 from .health import healthz
+from .oauth import JWTBearerTokenVerifier, OAuthResourceServerConfig
 from .server import create_server
 
 
@@ -29,6 +30,7 @@ class HTTPServerConfig:
     trusted_proxies: tuple[str, ...] = ()
     allowed_origins: tuple[str, ...] = ()
     bearer_token: str | None = field(default=None, repr=False)
+    oauth: OAuthResourceServerConfig | None = field(default=None, repr=False)
     log_level: str = "info"
 
 
@@ -38,7 +40,21 @@ def create_http_app(
 ) -> Starlette:
     """Create a Starlette app exposing `/mcp` and `/healthz`."""
     resolved_http_config = http_config or HTTPServerConfig()
-    mcp_server = create_server(config)
+    token_verifier = (
+        JWTBearerTokenVerifier(resolved_http_config.oauth)
+        if resolved_http_config.oauth is not None
+        else None
+    )
+    mcp_server = create_server(
+        config,
+        auth=(
+            resolved_http_config.oauth.auth_settings()
+            if resolved_http_config.oauth is not None
+            else None
+        ),
+        token_verifier=token_verifier,
+    )
+    mcp_app = mcp_server.streamable_http_app()
 
     @contextlib.asynccontextmanager
     async def lifespan(_app: Starlette) -> AsyncIterator[None]:
@@ -56,13 +72,17 @@ def create_http_app(
         ),
         Middleware(
             BearerTokenMiddleware,
-            bearer_token=resolved_http_config.bearer_token,
+            bearer_token=(
+                None
+                if resolved_http_config.oauth is not None
+                else resolved_http_config.bearer_token
+            ),
         ),
     ]
     return Starlette(
         routes=[
             Route("/healthz", healthz, methods=["GET"]),
-            Mount("/mcp", app=mcp_server.streamable_http_app()),
+            Mount("/", app=mcp_app),
         ],
         middleware=middleware,
         lifespan=lifespan,

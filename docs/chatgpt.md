@@ -28,20 +28,44 @@ https://your-domain.example/healthz -> http://app:8000/healthz
 4. Enter a user-facing name.
 5. Enter a short description.
 6. Enter the public HTTPS `/mcp` endpoint.
-7. Select the authentication option that matches your deployment.
+7. Select OAuth authentication when your deployment uses the built-in resource-server
+   mode.
 8. Create the connector.
 9. Verify that the expected read-only tool list appears.
 10. Refresh metadata after changing tools or descriptions.
 
 ## Authentication Notes
 
-This server does not implement multi-user OAuth yet. ChatGPT support is therefore
-limited to personal single-user deployments unless you place an authenticated reverse
-proxy or equivalent access-control layer in front of the app.
+ChatGPT Apps/Connectors should use OAuth 2.1 authorization-code flow with PKCE. This
+server acts as an OAuth resource server only: it validates access tokens issued by an
+external authorization server and exposes protected-resource metadata at:
+
+```text
+https://your-domain.example/.well-known/oauth-protected-resource/mcp
+```
+
+Example server options:
+
+```bash
+--oauth-issuer-url "https://auth.example.com/realms/tossinvest"
+--oauth-resource-url "https://your-domain.example/mcp"
+--oauth-jwks-uri "https://auth.example.com/realms/tossinvest/protocol/openid-connect/certs"
+--oauth-audience "https://your-domain.example/mcp"
+--oauth-required-scope "tossinvest:read"
+--oauth-allowed-email "you@example.com"
+```
+
+The issuer URL must match the token `iss` claim exactly. The audience defaults to the
+resource URL when `--oauth-audience` is omitted.
 
 Do not claim static bearer-token authentication works with ChatGPT unless you verify it
 against the current ChatGPT Apps/Connectors UI and documentation. For public exposure,
 use HTTPS and access control.
+
+OAuth authenticates the ChatGPT caller but does not create per-user TossInvest
+credentials. Personal deployments should restrict the authorization server or use
+`--oauth-allowed-subject` / `--oauth-allowed-email` so only the intended user can
+access the server.
 
 ## Safety Notes
 

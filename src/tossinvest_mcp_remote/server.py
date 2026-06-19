@@ -13,6 +13,8 @@ from .errors import UnsupportedLiveOrderModeError
 from .tools import TossInvestRemoteTools
 
 if TYPE_CHECKING:
+    from mcp.server.auth.provider import TokenVerifier
+    from mcp.server.auth.settings import AuthSettings
     from mcp.server.fastmcp import FastMCP
 
 ACCOUNT_SEQ_DESCRIPTION = (
@@ -36,9 +38,12 @@ def create_server(
     config: TossInvestRemoteServerConfig,
     *,
     client_factory: ClientContextFactory | None = None,
+    auth: AuthSettings | None = None,
+    token_verifier: TokenVerifier | None = None,
 ) -> FastMCP:
     """Create a read-only TossInvest MCP server."""
     from mcp.server.fastmcp import FastMCP
+    from mcp.server.transport_security import TransportSecuritySettings
 
     if config.enable_live_orders:
         raise UnsupportedLiveOrderModeError(
@@ -55,6 +60,9 @@ def create_server(
         name="TossInvest MCP Remote",
         instructions=SERVER_INSTRUCTIONS,
         stateless_http=True,
+        auth=auth,
+        token_verifier=token_verifier,
+        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
 
     _register_account_tools(server, tools)

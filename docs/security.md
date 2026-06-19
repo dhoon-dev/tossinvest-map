@@ -23,17 +23,33 @@ must not be left unauthenticated. Use HTTPS and one or more access controls such
 reverse proxy auth, network allowlisting, private tunnels, or supported bearer-token
 headers.
 
+For ChatGPT Apps/Connectors, use OAuth resource-server mode with an external
+authorization server. The server publishes protected-resource metadata, validates
+JWT access tokens with JWKS, checks issuer and audience, enforces configured scopes,
+and can restrict access to configured subjects or email addresses.
+
 ## Origin and Proxy Headers
 
 Configure `--allowed-origin` when you want the app to enforce Origin checks on `/mcp`.
 Configure `--trusted-proxy` before trusting `X-Forwarded-*` headers. Forwarded headers
 from untrusted clients are ignored.
 
-## OAuth TODO
+## OAuth Resource Server
 
-Multi-user OAuth is not implemented. Do not silently share one server-wide TossInvest
-credential set across multiple users. Future OAuth support must isolate credentials
-and sessions per authenticated user.
+This package does not implement an OAuth authorization server. Run one externally
+and configure:
+
+- `--oauth-issuer-url`
+- `--oauth-resource-url`
+- `--oauth-jwks-uri`
+- `--oauth-audience`
+- `--oauth-required-scope`
+- `--oauth-allowed-subject` or `--oauth-allowed-email`
+
+OAuth authenticates the MCP caller. It does not automatically create per-user
+TossInvest credentials. Do not silently share one server-wide TossInvest credential
+set across multiple users. Keep one personal deployment per credential set unless a
+separate credential-isolation design is added.
 
 ## Financial Scope
 

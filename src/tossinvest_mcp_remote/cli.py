@@ -8,6 +8,7 @@ import sys
 from collections.abc import Sequence
 from importlib.metadata import PackageNotFoundError, version
 
+from pydantic import AnyHttpUrl
 from tossinvest import __version__ as tossinvest_sdk_version
 
 from ._version import __version__
@@ -19,6 +20,7 @@ from .credentials import (
 )
 from .errors import CredentialHelperError, TossInvestMCPRemoteConfigError
 from .logging import configure_logging
+from .oauth import DEFAULT_OAUTH_ALGORITHMS, OAuthResourceServerConfig
 from .server_http import HTTPServerConfig, run_http
 from .server_stdio import run_stdio
 
@@ -56,6 +58,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--http-bearer-token-command",
         help="Command that prints the HTTP bearer token to stdout.",
     )
+    _add_oauth_args(http_parser)
     http_parser.add_argument("--log-level", default="info", help="uvicorn log level.")
 
     subparsers.add_parser("version", help="Print package and SDK version information.")
@@ -108,12 +111,19 @@ def http_config_from_args(args: argparse.Namespace) -> HTTPServerConfig:
         env_var="TOSSINVEST_MCP_BEARER_TOKEN",
         timeout=args.credential_helper_timeout,
     )
+    oauth = _oauth_config_from_args(args)
+    if bearer_token and oauth is not None:
+        raise TossInvestMCPRemoteConfigError(
+            "Use either static HTTP bearer-token authentication or OAuth, not both. "
+            "Unset TOSSINVEST_MCP_BEARER_TOKEN if needed."
+        )
     return HTTPServerConfig(
         host=args.host,
         port=args.port,
         trusted_proxies=tuple(args.trusted_proxy),
         allowed_origins=tuple(args.allowed_origin),
         bearer_token=bearer_token,
+        oauth=oauth,
         log_level=args.log_level,
     )
 
@@ -209,6 +219,116 @@ def _add_common_server_args(parser: argparse.ArgumentParser) -> None:
         default="single_user",
         help="Authentication mode. Multi-user OAuth is reserved for a future milestone.",
     )
+
+
+def _add_oauth_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--oauth-issuer-url",
+        default=os.getenv("TOSSINVEST_MCP_OAUTH_ISSUER_URL"),
+        help="OAuth authorization server issuer URL.",
+    )
+    parser.add_argument(
+        "--oauth-resource-url",
+        default=os.getenv("TOSSINVEST_MCP_OAUTH_RESOURCE_URL"),
+        help="Public MCP resource URL, usually the HTTPS /mcp endpoint.",
+    )
+    parser.add_argument(
+        "--oauth-jwks-uri",
+        default=os.getenv("TOSSINVEST_MCP_OAUTH_JWKS_URI"),
+        help="Authorization server JWKS URI used to validate access-token signatures.",
+    )
+    parser.add_argument(
+        "--oauth-audience",
+        action="append",
+        default=_split_env_values(os.getenv("TOSSINVEST_MCP_OAUTH_AUDIENCES")),
+        help="Accepted JWT audience. Defaults to --oauth-resource-url. May be repeated.",
+    )
+    parser.add_argument(
+        "--oauth-required-scope",
+        action="append",
+        default=_split_env_values(os.getenv("TOSSINVEST_MCP_OAUTH_REQUIRED_SCOPES")),
+        help="Required OAuth scope for /mcp. May be repeated.",
+    )
+    parser.add_argument(
+        "--oauth-allowed-subject",
+        action="append",
+        default=_split_env_values(os.getenv("TOSSINVEST_MCP_OAUTH_ALLOWED_SUBJECTS")),
+        help="Allowed token subject for personal deployments. May be repeated.",
+    )
+    parser.add_argument(
+        "--oauth-allowed-email",
+        action="append",
+        default=_split_env_values(os.getenv("TOSSINVEST_MCP_OAUTH_ALLOWED_EMAILS")),
+        help="Allowed token email for personal deployments. May be repeated.",
+    )
+    parser.add_argument(
+        "--oauth-algorithm",
+        action="append",
+        default=_split_env_values(os.getenv("TOSSINVEST_MCP_OAUTH_ALGORITHMS")),
+        help="Accepted JWT signing algorithm. Defaults to RS256 and ES256. May be repeated.",
+    )
+    parser.add_argument(
+        "--oauth-jwks-cache-ttl",
+        default=float(os.getenv("TOSSINVEST_MCP_OAUTH_JWKS_CACHE_TTL", "300")),
+        type=float,
+        help="JWKS cache TTL in seconds.",
+    )
+    parser.add_argument(
+        "--oauth-leeway",
+        default=float(os.getenv("TOSSINVEST_MCP_OAUTH_LEEWAY", "30")),
+        type=float,
+        help="JWT time validation leeway in seconds.",
+    )
+
+
+def _oauth_config_from_args(args: argparse.Namespace) -> OAuthResourceServerConfig | None:
+    oauth_fields = {
+        "issuer URL": args.oauth_issuer_url,
+        "resource URL": args.oauth_resource_url,
+        "JWKS URI": args.oauth_jwks_uri,
+    }
+    oauth_requested = any(oauth_fields.values()) or any(
+        (
+            args.oauth_audience,
+            args.oauth_required_scope,
+            args.oauth_allowed_subject,
+            args.oauth_allowed_email,
+            args.oauth_algorithm,
+        )
+    )
+    if not oauth_requested:
+        return None
+    missing = [label for label, value in oauth_fields.items() if not value]
+    if missing:
+        raise TossInvestMCPRemoteConfigError(
+            "OAuth configuration is incomplete. Missing: " + ", ".join(missing) + "."
+        )
+    oauth = OAuthResourceServerConfig(
+        issuer_url=args.oauth_issuer_url,
+        resource_url=args.oauth_resource_url,
+        jwks_uri=args.oauth_jwks_uri,
+        audiences=tuple(args.oauth_audience),
+        required_scopes=tuple(args.oauth_required_scope),
+        allowed_subjects=tuple(args.oauth_allowed_subject),
+        allowed_emails=tuple(args.oauth_allowed_email),
+        algorithms=tuple(args.oauth_algorithm) or DEFAULT_OAUTH_ALGORITHMS,
+        jwks_cache_ttl=args.oauth_jwks_cache_ttl,
+        leeway=args.oauth_leeway,
+    )
+    try:
+        oauth.auth_settings()
+        AnyHttpUrl(oauth.jwks_uri)
+    except ValueError as exc:
+        raise TossInvestMCPRemoteConfigError(
+            "OAuth configuration contains an invalid URL."
+        ) from exc
+    return oauth
+
+
+def _split_env_values(value: str | None) -> list[str]:
+    if value is None:
+        return []
+    return [item for item in value.replace(",", " ").split() if item]
 
 
 def _print_version() -> None:

@@ -60,12 +60,8 @@ codex mcp --help
 
 Use `/mcp` in the Codex TUI to verify active MCP servers.
 
-## OAuth Future
+## OAuth
 
-If multi-user OAuth is added later, Codex documentation should include:
-
-```bash
-codex mcp login tossinvest
-```
-
-Milestone 1 does not implement that mode.
+OAuth resource-server mode is intended for ChatGPT Apps/Connectors. For Codex HTTP
+usage, prefer static bearer-token configuration when your installed Codex surface
+supports `bearer_token_env_var`.

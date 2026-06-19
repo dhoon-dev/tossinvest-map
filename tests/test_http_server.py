@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+import json
+import time
+
+import jwt
+import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
+from jwt.algorithms import RSAAlgorithm
+from pytest_httpx import HTTPXMock
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -7,11 +15,17 @@ from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from tossinvest_mcp_remote.config import TossInvestRemoteServerConfig
+from tossinvest_mcp_remote.oauth import JWTBearerTokenVerifier, OAuthResourceServerConfig
 from tossinvest_mcp_remote.server_http import (
     HTTPServerConfig,
     TrustedForwardedHeadersMiddleware,
     create_http_app,
 )
+
+ISSUER_URL = "https://auth.example.com"
+JWKS_URI = f"{ISSUER_URL}/.well-known/jwks.json"
+RESOURCE_URL = "https://mcp.example.com/mcp"
+KEY_ID = "test-key"
 
 
 def test_http_bearer_token_protects_mcp_route() -> None:
@@ -37,6 +51,129 @@ def test_http_bearer_token_does_not_protect_healthz() -> None:
         response = client.get("/healthz")
 
     assert response.status_code == 200
+
+
+def test_mcp_route_reaches_fastmcp_app_when_unprotected() -> None:
+    app = create_http_app(
+        TossInvestRemoteServerConfig("client-id", "client-secret"),
+        HTTPServerConfig(),
+    )
+
+    with TestClient(app, follow_redirects=False) as client:
+        response = client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
+            headers={"Accept": "application/json, text/event-stream"},
+        )
+
+    assert response.status_code != 404
+
+
+def test_oauth_protected_resource_metadata_is_exposed() -> None:
+    app = create_http_app(
+        TossInvestRemoteServerConfig("client-id", "client-secret"),
+        HTTPServerConfig(
+            oauth=OAuthResourceServerConfig(
+                issuer_url=ISSUER_URL,
+                resource_url=RESOURCE_URL,
+                jwks_uri=JWKS_URI,
+                required_scopes=("tossinvest:read",),
+            )
+        ),
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/.well-known/oauth-protected-resource/mcp")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "resource": RESOURCE_URL,
+        "authorization_servers": [f"{ISSUER_URL}/"],
+        "scopes_supported": ["tossinvest:read"],
+        "bearer_methods_supported": ["header"],
+    }
+
+
+def test_oauth_protects_mcp_route() -> None:
+    app = create_http_app(
+        TossInvestRemoteServerConfig("client-id", "client-secret"),
+        HTTPServerConfig(
+            oauth=OAuthResourceServerConfig(
+                issuer_url=ISSUER_URL,
+                resource_url=RESOURCE_URL,
+                jwks_uri=JWKS_URI,
+                required_scopes=("tossinvest:read",),
+            )
+        ),
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
+            headers={"Accept": "application/json, text/event-stream"},
+        )
+
+    assert response.status_code == 401
+    assert response.json()["error"] == "invalid_token"
+    assert (
+        'resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp"'
+        in response.headers["www-authenticate"]
+    )
+
+
+def test_oauth_rejects_insufficient_scope(httpx_mock: HTTPXMock) -> None:
+    private_key = _rsa_private_key()
+    httpx_mock.add_response(method="GET", url=JWKS_URI, json=_jwks(private_key))
+    app = create_http_app(
+        TossInvestRemoteServerConfig("client-id", "client-secret"),
+        HTTPServerConfig(
+            oauth=OAuthResourceServerConfig(
+                issuer_url=ISSUER_URL,
+                resource_url=RESOURCE_URL,
+                jwks_uri=JWKS_URI,
+                required_scopes=("tossinvest:read",),
+            )
+        ),
+    )
+
+    token = _jwt(private_key, scope="profile")
+    with TestClient(app) as client:
+        response = client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
+            headers={
+                "Accept": "application/json, text/event-stream",
+                "Authorization": f"Bearer {token}",
+            },
+        )
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "insufficient_scope"
+
+
+@pytest.mark.asyncio
+async def test_jwt_bearer_token_verifier_accepts_allowed_email(httpx_mock: HTTPXMock) -> None:
+    private_key = _rsa_private_key()
+    httpx_mock.add_response(method="GET", url=JWKS_URI, json=_jwks(private_key))
+    verifier = JWTBearerTokenVerifier(
+        OAuthResourceServerConfig(
+            issuer_url=ISSUER_URL,
+            resource_url=RESOURCE_URL,
+            jwks_uri=JWKS_URI,
+            required_scopes=("tossinvest:read",),
+            allowed_emails=("owner@example.com",),
+        )
+    )
+
+    access_token = await verifier.verify_token(
+        _jwt(private_key, scope="profile tossinvest:read", email="owner@example.com")
+    )
+
+    assert access_token is not None
+    assert access_token.client_id == "chatgpt"
+    assert access_token.scopes == ["profile", "tossinvest:read"]
+    assert access_token.subject == "owner"
 
 
 def test_origin_validation_rejects_untrusted_origin() -> None:
@@ -92,3 +229,37 @@ def test_forwarded_headers_apply_for_trusted_proxy() -> None:
         )
 
     assert response.json() == {"scheme": "https", "host": "public.example"}
+
+
+def _rsa_private_key() -> rsa.RSAPrivateKey:
+    return rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+
+def _jwks(private_key: rsa.RSAPrivateKey) -> dict[str, object]:
+    public_jwk = json.loads(RSAAlgorithm.to_jwk(private_key.public_key()))
+    public_jwk.update({"kid": KEY_ID, "alg": "RS256"})
+    return {"keys": [public_jwk]}
+
+
+def _jwt(
+    private_key: rsa.RSAPrivateKey,
+    *,
+    scope: str = "tossinvest:read",
+    email: str = "owner@example.com",
+) -> str:
+    now = int(time.time())
+    return jwt.encode(
+        {
+            "iss": ISSUER_URL,
+            "aud": RESOURCE_URL,
+            "sub": "owner",
+            "azp": "chatgpt",
+            "email": email,
+            "scope": scope,
+            "iat": now,
+            "exp": now + 300,
+        },
+        private_key,
+        algorithm="RS256",
+        headers={"kid": KEY_ID},
+    )

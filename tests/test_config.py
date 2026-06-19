@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pytest_httpx import HTTPXMock
 
-from tossinvest_mcp_remote.cli import config_from_args, parse_args
+from tossinvest_mcp_remote.cli import config_from_args, http_config_from_args, parse_args
 from tossinvest_mcp_remote.config import TossInvestRemoteServerConfig
 from tossinvest_mcp_remote.errors import TossInvestMCPRemoteConfigError
 
@@ -87,6 +87,77 @@ def test_config_rejects_account_number_and_seq_from_environment(
 
     with pytest.raises(TossInvestMCPRemoteConfigError):
         config_from_args(args)
+
+
+def test_http_config_from_args_preserves_oauth_settings() -> None:
+    args = parse_args(
+        [
+            "serve-http",
+            "--client-id",
+            "client-id",
+            "--client-secret",
+            "client-secret",
+            "--oauth-issuer-url",
+            "https://auth.example.com",
+            "--oauth-resource-url",
+            "https://mcp.example.com/mcp",
+            "--oauth-jwks-uri",
+            "https://auth.example.com/.well-known/jwks.json",
+            "--oauth-required-scope",
+            "tossinvest:read",
+            "--oauth-allowed-email",
+            "owner@example.com",
+        ]
+    )
+
+    http_config = http_config_from_args(args)
+
+    assert http_config.oauth is not None
+    assert http_config.oauth.issuer_url == "https://auth.example.com"
+    assert http_config.oauth.resource_url == "https://mcp.example.com/mcp"
+    assert http_config.oauth.required_scopes == ("tossinvest:read",)
+    assert http_config.oauth.allowed_emails == ("owner@example.com",)
+
+
+def test_http_config_rejects_incomplete_oauth_settings() -> None:
+    args = parse_args(
+        [
+            "serve-http",
+            "--client-id",
+            "client-id",
+            "--client-secret",
+            "client-secret",
+            "--oauth-issuer-url",
+            "https://auth.example.com",
+        ]
+    )
+
+    with pytest.raises(TossInvestMCPRemoteConfigError):
+        http_config_from_args(args)
+
+
+def test_http_config_rejects_static_bearer_with_oauth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TOSSINVEST_MCP_BEARER_TOKEN", "secret")
+    args = parse_args(
+        [
+            "serve-http",
+            "--client-id",
+            "client-id",
+            "--client-secret",
+            "client-secret",
+            "--oauth-issuer-url",
+            "https://auth.example.com",
+            "--oauth-resource-url",
+            "https://mcp.example.com/mcp",
+            "--oauth-jwks-uri",
+            "https://auth.example.com/.well-known/jwks.json",
+        ]
+    )
+
+    with pytest.raises(TossInvestMCPRemoteConfigError):
+        http_config_from_args(args)
 
 
 def test_config_create_client_does_not_resolve_account_number() -> None:
