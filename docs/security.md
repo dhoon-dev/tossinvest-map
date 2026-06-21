@@ -69,8 +69,5 @@ Local STDIO deployments can opt in with `--allow-stdio-live-orders`. That mode i
 a trusted local Codex process only; it does not provide OAuth authorization because
 STDIO has no caller access token.
 
-`--require-live-order-confirmation` adds a server-side two-step flow for both STDIO
-and HTTP. The first tool call stores a short-lived pending confirmation and only
-`confirm_live_order` executes the order. Pending confirmations are in-memory,
-process-local, expire after the configured TTL, and are bound to the same local or
-OAuth caller that created them.
+Configure MCP client approval policies for `create_order`, `modify_order`, and
+`cancel_order` before exposing live order tools to real accounts.

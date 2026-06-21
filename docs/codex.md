@@ -47,21 +47,24 @@ args = [
   "12345678901",
   "--enable-live-orders",
   "--allow-stdio-live-orders",
-  "--require-live-order-confirmation",
 ]
 startup_timeout_sec = 30
 tool_timeout_sec = 60
 default_tools_approval_mode = "approve"
 
-[mcp_servers.tossinvest.tools.confirm_live_order]
+[mcp_servers.tossinvest.tools.create_order]
+approval_mode = "prompt"
+
+[mcp_servers.tossinvest.tools.modify_order]
+approval_mode = "prompt"
+
+[mcp_servers.tossinvest.tools.cancel_order]
 approval_mode = "prompt"
 ```
 
 `--allow-stdio-live-orders` is not OAuth authorization. It is a local opt-in for a
 trusted Codex process, so keep credentials isolated to the intended account.
-`--require-live-order-confirmation` makes `create_order`, `modify_order`, and
-`cancel_order` return pending confirmations. Only `confirm_live_order` submits the
-actual order, and the tool-specific approval setting prompts at that final step.
+The tool-specific approval settings prompt before each live order tool call.
 
 ## Streamable HTTP
 

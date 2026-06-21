@@ -272,46 +272,6 @@ def test_live_order_tools_build_sdk_requests_and_forward_account() -> None:
     assert client.orders.canceled_order_id == "order-1"
 
 
-def test_live_order_previews_validate_requests_without_submitting() -> None:
-    client = _FakeClient()
-    tools = TossInvestRemoteTools(cast(ClientContextFactory, lambda: _FakeClientContext(client)))
-
-    created = tools.preview_create_order(
-        symbol="005930",
-        side="BUY",
-        order_type="LIMIT",
-        quantity="1",
-        price="72000",
-        account_seq="7",
-    )
-    modified = tools.preview_modify_order(
-        "order-1",
-        order_type="LIMIT",
-        quantity="2",
-        account_seq="7",
-    )
-    canceled = tools.preview_cancel_order("order-1", account_seq="7")
-
-    assert created == {
-        "symbol": "005930",
-        "side": "BUY",
-        "order_type": "LIMIT",
-        "quantity": "1",
-        "price": "72000",
-        "account_seq": "7",
-    }
-    assert modified == {
-        "order_type": "LIMIT",
-        "quantity": "2",
-        "account_seq": "7",
-        "order_id": "order-1",
-    }
-    assert canceled == {"order_id": "order-1", "account_seq": "7"}
-    assert client.orders.created_request is None
-    assert client.orders.modified_request is None
-    assert client.orders.canceled_order_id is None
-
-
 def test_tools_reuse_account_list_cache_for_account_resolution() -> None:
     client = _FakeClient()
     config = TossInvestRemoteServerConfig(

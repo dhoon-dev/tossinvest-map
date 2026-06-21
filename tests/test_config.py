@@ -4,10 +4,7 @@ import pytest
 from pytest_httpx import HTTPXMock
 
 from tossinvest_mcp_remote.cli import config_from_args, http_config_from_args, parse_args
-from tossinvest_mcp_remote.config import (
-    DEFAULT_LIVE_ORDER_CONFIRMATION_TTL,
-    TossInvestRemoteServerConfig,
-)
+from tossinvest_mcp_remote.config import TossInvestRemoteServerConfig
 from tossinvest_mcp_remote.errors import TossInvestMCPRemoteConfigError
 
 from .conftest import BASE_URL, account_payload, add_api_response, add_token_response
@@ -104,52 +101,6 @@ def test_config_from_args_preserves_stdio_live_order_opt_in() -> None:
     assert config.enable_live_orders is True
     assert config.allow_stdio_live_orders is True
     assert config.live_order_required_scopes == ()
-
-
-def test_config_from_args_preserves_live_order_confirmation_settings() -> None:
-    args = parse_args(
-        [
-            "stdio",
-            "--client-id",
-            "client-id",
-            "--client-secret",
-            "client-secret",
-            "--enable-live-orders",
-            "--allow-stdio-live-orders",
-            "--require-live-order-confirmation",
-            "--live-order-confirmation-ttl",
-            "120",
-        ]
-    )
-
-    config = config_from_args(args)
-
-    assert config.require_live_order_confirmation is True
-    assert config.live_order_confirmation_ttl == 120.0
-
-
-def test_config_from_args_preserves_live_order_confirmation_from_environment(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("TOSSINVEST_MCP_REQUIRE_LIVE_ORDER_CONFIRMATION", "true")
-    monkeypatch.setenv("TOSSINVEST_MCP_LIVE_ORDER_CONFIRMATION_TTL", "180")
-    args = parse_args(["stdio", "--client-id", "client-id", "--client-secret", "client-secret"])
-
-    config = config_from_args(args)
-
-    assert config.require_live_order_confirmation is True
-    assert config.live_order_confirmation_ttl == 180.0
-
-
-def test_config_from_args_ignores_empty_live_order_confirmation_ttl(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("TOSSINVEST_MCP_LIVE_ORDER_CONFIRMATION_TTL", "")
-    args = parse_args(["stdio", "--client-id", "client-id", "--client-secret", "client-secret"])
-
-    config = config_from_args(args)
-
-    assert config.live_order_confirmation_ttl == DEFAULT_LIVE_ORDER_CONFIRMATION_TTL
 
 
 def test_config_from_args_preserves_stdio_live_order_opt_in_from_environment(

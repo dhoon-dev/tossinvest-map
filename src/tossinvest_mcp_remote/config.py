@@ -18,7 +18,6 @@ from tossinvest.config import (
 from .accounts import find_account_by_number
 
 DEFAULT_ACCOUNT_CACHE_TTL = 1.0
-DEFAULT_LIVE_ORDER_CONFIRMATION_TTL = 300.0
 DEFAULT_SERVER_USER_AGENT = f"{DEFAULT_USER_AGENT} tossinvest-mcp-remote/0.1.0"
 
 
@@ -38,8 +37,6 @@ class TossInvestRemoteServerConfig:
     enable_live_orders: bool = False
     live_order_required_scopes: tuple[str, ...] = ()
     allow_stdio_live_orders: bool = False
-    require_live_order_confirmation: bool = False
-    live_order_confirmation_ttl: float = DEFAULT_LIVE_ORDER_CONFIRMATION_TTL
     mode: Literal["single_user", "multi_user"] = "single_user"
     _account_list: tuple[Account, ...] | None = field(
         default=None,

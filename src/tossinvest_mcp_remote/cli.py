@@ -14,7 +14,6 @@ from tossinvest import __version__ as tossinvest_sdk_version
 from ._version import __version__
 from .config import (
     DEFAULT_ACCOUNT_CACHE_TTL,
-    DEFAULT_LIVE_ORDER_CONFIRMATION_TTL,
     TossInvestRemoteServerConfig,
 )
 from .credentials import (
@@ -115,8 +114,6 @@ def config_from_args(args: argparse.Namespace) -> TossInvestRemoteServerConfig:
         enable_live_orders=args.enable_live_orders,
         live_order_required_scopes=tuple(args.live_order_required_scope),
         allow_stdio_live_orders=args.allow_stdio_live_orders,
-        require_live_order_confirmation=args.require_live_order_confirmation,
-        live_order_confirmation_ttl=args.live_order_confirmation_ttl,
         mode=args.mode,
     )
 
@@ -253,24 +250,6 @@ def _add_common_server_args(parser: argparse.ArgumentParser) -> None:
             "Use with --enable-live-orders for single-endpoint tool-level authorization."
         ),
     )
-    parser.add_argument(
-        "--require-live-order-confirmation",
-        action="store_true",
-        default=_env_flag(os.getenv("TOSSINVEST_MCP_REQUIRE_LIVE_ORDER_CONFIRMATION")),
-        help=(
-            "Make live order tools create pending confirmations. "
-            "Only confirm_live_order submits the live order."
-        ),
-    )
-    parser.add_argument(
-        "--live-order-confirmation-ttl",
-        default=_env_float(
-            os.getenv("TOSSINVEST_MCP_LIVE_ORDER_CONFIRMATION_TTL"),
-            DEFAULT_LIVE_ORDER_CONFIRMATION_TTL,
-        ),
-        type=float,
-        help="Live order confirmation TTL in seconds.",
-    )
 
 
 def _add_oauth_args(parser: argparse.ArgumentParser) -> None:
@@ -385,12 +364,6 @@ def _split_env_values(value: str | None) -> list[str]:
 
 def _env_flag(value: str | None) -> bool:
     return value is not None and value.strip().casefold() in {"1", "true", "yes", "on"}
-
-
-def _env_float(value: str | None, default: float) -> float:
-    if value is None or not value.strip():
-        return default
-    return float(value)
 
 
 def _print_version() -> None:

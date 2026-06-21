@@ -1,8 +1,7 @@
 [mcp_servers.tossinvest]
 # This local STDIO example is read-only by default. To allow live orders for a
 # trusted personal Codex process, add "--enable-live-orders" and
-# "--allow-stdio-live-orders" to args. Keep "--require-live-order-confirmation"
-# enabled so only confirm_live_order sends the final TossInvest request.
+# "--allow-stdio-live-orders" to args, then keep live order tools on prompt.
 command = "uvx"
 args = [
   "--from",
@@ -17,11 +16,16 @@ args = [
   "12345678901",
   # "--enable-live-orders",
   # "--allow-stdio-live-orders",
-  # "--require-live-order-confirmation",
 ]
 startup_timeout_sec = 30
 tool_timeout_sec = 60
 default_tools_approval_mode = "approve"
 
-[mcp_servers.tossinvest.tools.confirm_live_order]
+[mcp_servers.tossinvest.tools.create_order]
+approval_mode = "prompt"
+
+[mcp_servers.tossinvest.tools.modify_order]
+approval_mode = "prompt"
+
+[mcp_servers.tossinvest.tools.cancel_order]
 approval_mode = "prompt"

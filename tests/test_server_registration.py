@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-from contextlib import AbstractContextManager
-from types import TracebackType
 from typing import cast
 
 import pytest
 from mcp.server.auth.provider import AccessToken
-from tossinvest import OrderCreateRequest, OrderResponse
 
 import tossinvest_mcp_remote.server as server_module
-from tossinvest_mcp_remote.client_factory import ClientContextFactory
 from tossinvest_mcp_remote.config import TossInvestRemoteServerConfig
 from tossinvest_mcp_remote.errors import TossInvestMCPRemoteConfigError
 from tossinvest_mcp_remote.server import (
@@ -47,42 +43,6 @@ def _schema_enum(schema: dict[str, object], property_schema: dict[str, object]) 
                     if nested_enum is not None:
                         return nested_enum
     return None
-
-
-class _ConfirmOrders:
-    account: str | int | None = None
-    created_request: OrderCreateRequest | None = None
-
-    def create_order(
-        self,
-        request: OrderCreateRequest,
-        *,
-        account: str | int | None = None,
-    ) -> OrderResponse:
-        self.account = account
-        self.created_request = request
-        return OrderResponse.model_validate({"orderId": "order-1"})
-
-
-class _ConfirmClient:
-    def __init__(self) -> None:
-        self.orders = _ConfirmOrders()
-
-
-class _ConfirmClientContext(AbstractContextManager[_ConfirmClient]):
-    def __init__(self, client: _ConfirmClient) -> None:
-        self.client = client
-
-    def __enter__(self) -> _ConfirmClient:
-        return self.client
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        return None
 
 
 async def test_create_server_registers_read_only_tools_only() -> None:
@@ -174,7 +134,7 @@ async def test_live_order_tools_allow_stdio_opt_in_without_oauth_scope() -> None
     assert _authorize_live_order((), allow_local_live_orders=True) == "local-stdio"
 
 
-async def test_live_order_confirmation_registers_confirm_tool() -> None:
+async def test_live_order_tools_do_not_register_confirm_tool() -> None:
     pytest.importorskip("mcp.server.fastmcp")
 
     server = create_server(
@@ -183,67 +143,13 @@ async def test_live_order_confirmation_registers_confirm_tool() -> None:
             "client-secret",
             enable_live_orders=True,
             allow_stdio_live_orders=True,
-            require_live_order_confirmation=True,
         )
     )
     tools = {tool.name: tool for tool in await server.list_tools()}
 
-    assert "confirm_live_order" in tools
+    assert "confirm_live_order" not in tools
     assert tools["create_order"].annotations is not None
-    assert tools["create_order"].annotations.destructiveHint is False
-    assert tools["confirm_live_order"].annotations is not None
-    assert tools["confirm_live_order"].annotations.destructiveHint is True
-
-
-async def test_live_order_confirmation_requires_confirm_before_sdk_call() -> None:
-    pytest.importorskip("mcp.server.fastmcp")
-    client = _ConfirmClient()
-    server = create_server(
-        TossInvestRemoteServerConfig(
-            "client-id",
-            "client-secret",
-            account="7",
-            enable_live_orders=True,
-            allow_stdio_live_orders=True,
-            require_live_order_confirmation=True,
-        ),
-        client_factory=cast(ClientContextFactory, lambda: _ConfirmClientContext(client)),
-    )
-
-    _, pending_raw = await server.call_tool(
-        "create_order",
-        {
-            "symbol": "005930",
-            "side": "BUY",
-            "order_type": "LIMIT",
-            "quantity": "1",
-            "price": "72000",
-        },
-    )
-    pending = cast(dict[str, object], pending_raw)
-    pending_summary = cast(dict[str, object], pending["summary"])
-
-    assert pending["status"] == "pending_confirmation"
-    assert pending["action"] == "create_order"
-    assert pending_summary["account_seq"] == "7"
-    assert client.orders.created_request is None
-
-    _, confirmed_raw = await server.call_tool(
-        "confirm_live_order",
-        {"confirmation_id": pending["confirmationId"]},
-    )
-    confirmed = cast(dict[str, object], confirmed_raw)
-
-    assert confirmed == {"orderId": "order-1"}
-    assert client.orders.account == "7"
-    assert client.orders.created_request is not None
-    assert client.orders.created_request.model_dump(exclude_none=True) == {
-        "symbol": "005930",
-        "side": "BUY",
-        "order_type": "LIMIT",
-        "quantity": "1",
-        "price": "72000",
-    }
+    assert tools["create_order"].annotations.destructiveHint is True
 
 
 async def test_live_order_tool_schemas_expose_sdk_enums() -> None:

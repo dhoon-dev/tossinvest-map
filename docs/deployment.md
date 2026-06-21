@@ -17,9 +17,9 @@ For local Codex over STDIO, live order tools can instead be enabled with
 `--enable-live-orders --allow-stdio-live-orders`. This is a local opt-in and should
 not be used as an HTTP access-control substitute.
 
-For either transport, `--require-live-order-confirmation` makes live order tools
-return pending confirmations. The final `confirm_live_order` tool is the only call
-that sends create, modify, or cancel requests to TossInvest.
+Configure MCP client approval policies for `create_order`, `modify_order`, and
+`cancel_order` before enabling live order tools on a real account.
+
 
 Recommended controls:
 
@@ -45,7 +45,6 @@ uv run tossinvest-mcp-remote serve-http \
   --oauth-required-scope "tossinvest:read" \
   --live-order-required-scope "tossinvest:trade" \
   --oauth-allowed-email "you@example.com" \
-  --require-live-order-confirmation \
   --enable-live-orders
 ```
 

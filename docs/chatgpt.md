@@ -53,7 +53,6 @@ Example server options:
 --oauth-required-scope "tossinvest:read"
 --live-order-required-scope "tossinvest:trade"
 --oauth-allowed-email "you@example.com"
---require-live-order-confirmation
 --enable-live-orders
 ```
 
@@ -75,6 +74,5 @@ The server exposes financial account and market data. It does not provide invest
 advice. HTTP live order tools are disabled by default and require both
 `--enable-live-orders` and at least one `--live-order-required-scope`. The configured
 live-order scopes are checked only for `create_order`, `modify_order`, and
-`cancel_order`. Add `--require-live-order-confirmation` to make those tools create
-short-lived pending confirmations; only `confirm_live_order` sends the final request
-to TossInvest.
+`cancel_order`. Configure client-side approval policies for those live order tools
+before exposing them to real accounts.
