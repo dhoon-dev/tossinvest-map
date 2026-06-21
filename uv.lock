@@ -1047,7 +1047,7 @@ requires-dist = [
     { name = "pytest-httpx", marker = "extra == 'dev'", specifier = ">=0.30" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12" },
     { name = "starlette", marker = "extra == 'http'", specifier = ">=0.37,<1" },
-    { name = "tossinvest-openapi", extras = ["mcp"], git = "https://github.com/dhoon-dev/tossinvest-openapi.git?rev=main" },
+    { name = "tossinvest-openapi", extras = ["mcp"], git = "https://github.com/dhoon-dev/tossinvest-openapi.git?rev=v1.0.2" },
     { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.1a15" },
     { name = "uvicorn", marker = "extra == 'http'", specifier = ">=0.30,<1" },
 ]
@@ -1065,8 +1065,8 @@ docs = [{ name = "sphinx", specifier = ">=9.1,<10" }]
 
 [[package]]
 name = "tossinvest-openapi"
-version = "1.0.1"
-source = { git = "https://github.com/dhoon-dev/tossinvest-openapi.git?rev=main#f6149150a08fe92f1530c44208eb9aba47d3e8b1" }
+version = "1.0.2"
+source = { git = "https://github.com/dhoon-dev/tossinvest-openapi.git?rev=v1.0.2#90f1cc780160846035ad6f39093cd3a95dbabfb6" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },

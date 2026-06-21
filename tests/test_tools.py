@@ -9,6 +9,7 @@ from tossinvest import (
     Account,
     BuyingPowerResponse,
     HoldingsOverview,
+    PaginatedOrderResponse,
     PriceResponse,
 )
 
@@ -73,6 +74,29 @@ class _Assets:
 
 class _Orders:
     account: str | int | None = None
+    listed_status: str | None = None
+
+    def list_orders(
+        self,
+        *,
+        status: str = "OPEN",
+        symbol: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        account: str | int | None = None,
+    ) -> PaginatedOrderResponse:
+        assert symbol is None
+        assert from_date is None
+        assert to_date is None
+        assert cursor is None
+        assert limit is None
+        self.account = account
+        self.listed_status = status
+        return PaginatedOrderResponse.model_validate(
+            {"orders": [], "nextCursor": None, "hasNext": False}
+        )
 
     def get_buying_power(
         self,
@@ -149,6 +173,17 @@ def test_account_scoped_tools_forward_account_override() -> None:
     result = tools.get_buying_power(currency="KRW", account_seq="7")
 
     assert result == {"currency": "KRW", "cashBuyingPower": "100000"}
+    assert client.orders.account == "7"
+
+
+def test_list_orders_defaults_to_open_status() -> None:
+    client = _FakeClient()
+    tools = TossInvestRemoteTools(cast(ClientContextFactory, lambda: _FakeClientContext(client)))
+
+    result = tools.list_orders(account_seq="7")
+
+    assert result == {"orders": [], "hasNext": False}
+    assert client.orders.listed_status == "OPEN"
     assert client.orders.account == "7"
 
 

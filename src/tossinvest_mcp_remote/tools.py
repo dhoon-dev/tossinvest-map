@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import cast
 
 from pydantic import BaseModel
-from tossinvest import Account
+from tossinvest import Account, CandleInterval, CurrencyCode, OrderListStatus
 
 from .accounts import find_account_by_number
 from .client_factory import ClientContextFactory
@@ -91,7 +91,7 @@ class TossInvestRemoteTools:
         self,
         symbol: str,
         *,
-        interval: str,
+        interval: CandleInterval,
         count: int | None = None,
         before: str | None = None,
         adjusted: bool | None = None,
@@ -111,8 +111,8 @@ class TossInvestRemoteTools:
     def get_exchange_rate(
         self,
         *,
-        base_currency: str,
-        quote_currency: str,
+        base_currency: CurrencyCode,
+        quote_currency: CurrencyCode,
         date_time: str | None = None,
     ) -> dict[str, object]:
         """Return an exchange rate between two supported currencies."""
@@ -148,7 +148,7 @@ class TossInvestRemoteTools:
     def list_orders(
         self,
         *,
-        status: str,
+        status: OrderListStatus = "OPEN",
         symbol: str | None = None,
         from_date: str | None = None,
         to_date: str | None = None,
@@ -180,7 +180,7 @@ class TossInvestRemoteTools:
     def get_buying_power(
         self,
         *,
-        currency: str,
+        currency: CurrencyCode,
         account_seq: str | int | None = None,
     ) -> dict[str, object]:
         """Return cash buying power for the requested currency."""

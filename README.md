@@ -19,19 +19,19 @@ This repository does not vendor or reimplement the SDK. It depends on
 
 ## Installation
 
-Development currently uses the public HTTPS Git dependency:
+Development currently uses the public HTTPS Git dependency pinned to the SDK release tag:
 
 ```toml
 dependencies = [
-  "tossinvest-openapi[mcp] @ git+https://github.com/dhoon-dev/tossinvest-openapi.git@main",
+  "tossinvest-openapi[mcp] @ git+https://github.com/dhoon-dev/tossinvest-openapi.git@v1.0.2",
 ]
 ```
 
-When a matching package release is available, deployments can use PyPI:
+When a matching PyPI package is published, deployments can use PyPI:
 
 ```toml
 dependencies = [
-  "tossinvest-openapi[mcp]>=1.0.1",
+  "tossinvest-openapi[mcp]>=1.0.2",
 ]
 ```
 

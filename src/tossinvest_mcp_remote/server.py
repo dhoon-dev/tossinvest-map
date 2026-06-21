@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from mcp.types import ToolAnnotations
 from pydantic import Field
+from tossinvest import CandleInterval, CurrencyCode, OrderListStatus
 
 from .client_factory import ClientContextFactory
 from .config import TossInvestRemoteServerConfig
@@ -142,7 +143,7 @@ def _register_market_data_tools(server: FastMCP, tools: TossInvestRemoteTools) -
     @server.tool(annotations=read_only_annotations)
     def get_candles(
         symbol: str,
-        interval: str,
+        interval: CandleInterval,
         *,
         count: int | None = None,
         before: str | None = None,
@@ -164,8 +165,8 @@ def _register_market_info_tools(server: FastMCP, tools: TossInvestRemoteTools) -
 
     @server.tool(annotations=read_only_annotations)
     def get_exchange_rate(
-        base_currency: str,
-        quote_currency: str,
+        base_currency: CurrencyCode,
+        quote_currency: CurrencyCode,
         date_time: str | None = None,
     ) -> dict[str, object]:
         """Return an exchange rate between two supported currencies."""
@@ -200,7 +201,7 @@ def _register_account_scoped_tools(server: FastMCP, tools: TossInvestRemoteTools
 
     @server.tool(annotations=read_only_annotations)
     def list_orders(
-        status: str,
+        status: OrderListStatus = "OPEN",
         symbol: str | None = None,
         from_date: str | None = None,
         to_date: str | None = None,
@@ -229,7 +230,7 @@ def _register_account_scoped_tools(server: FastMCP, tools: TossInvestRemoteTools
 
     @server.tool(annotations=read_only_annotations)
     def get_buying_power(
-        currency: str,
+        currency: CurrencyCode,
         account_seq: str | None = Field(default=None, description=ACCOUNT_SEQ_DESCRIPTION),
     ) -> dict[str, object]:
         """Return cash buying power using the configured default accountSeq or an override."""
