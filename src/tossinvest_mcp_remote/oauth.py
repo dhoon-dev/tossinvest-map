@@ -10,9 +10,22 @@ from typing import Any
 import httpx
 import jwt
 from jwt import PyJWK
-from mcp.server.auth.provider import AccessToken
+from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from pydantic import AnyHttpUrl
+
+__all__ = (
+    "DEFAULT_CLIENT_ID_CLAIMS",
+    "DEFAULT_JWKS_CACHE_TTL",
+    "DEFAULT_JWT_LEEWAY",
+    "DEFAULT_OAUTH_ALGORITHMS",
+    "DEFAULT_SCOPE_CLAIMS",
+    "JWTBearerTokenVerifier",
+    "MCPResourceServerAuth",
+    "OAuthResourceServerConfig",
+    "create_auth_settings",
+    "create_mcp_resource_server_auth",
+)
 
 DEFAULT_OAUTH_ALGORITHMS = ("RS256", "ES256")
 DEFAULT_JWKS_CACHE_TTL = 300.0
@@ -45,19 +58,53 @@ class OAuthResourceServerConfig:
 
     def auth_settings(self) -> AuthSettings:
         """Build FastMCP auth settings for protected resource metadata."""
-        return AuthSettings(
-            issuer_url=AnyHttpUrl(self.issuer_url),
-            resource_server_url=AnyHttpUrl(self.resource_url),
-            required_scopes=list(self.required_scopes) or None,
-        )
+        return create_auth_settings(self)
+
+
+@dataclass(frozen=True, slots=True)
+class MCPResourceServerAuth:
+    """FastMCP-compatible auth objects for an OAuth-protected MCP server."""
+
+    auth_settings: AuthSettings
+    token_verifier: TokenVerifier
+
+
+def create_auth_settings(config: OAuthResourceServerConfig) -> AuthSettings:
+    """Build MCP auth settings for protected resource metadata."""
+    return AuthSettings(
+        issuer_url=AnyHttpUrl(config.issuer_url),
+        resource_server_url=AnyHttpUrl(config.resource_url),
+        required_scopes=list(config.required_scopes) or None,
+    )
+
+
+def create_mcp_resource_server_auth(
+    config: OAuthResourceServerConfig,
+    *,
+    http_client: httpx.AsyncClient | None = None,
+) -> MCPResourceServerAuth:
+    """Build the MCP auth settings and token verifier for one resource server."""
+    return MCPResourceServerAuth(
+        auth_settings=create_auth_settings(config),
+        token_verifier=JWTBearerTokenVerifier(config, http_client=http_client),
+    )
 
 
 class JWTBearerTokenVerifier:
     """Validate JWT bearer tokens from an OAuth authorization server."""
 
-    def __init__(self, config: OAuthResourceServerConfig) -> None:
+    def __init__(
+        self,
+        config: OAuthResourceServerConfig,
+        *,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
         self.config = config
-        self.jwks_cache = _JWKSetCache(config.jwks_uri, ttl=config.jwks_cache_ttl)
+        self.jwks_cache = _JWKSetCache(
+            config.jwks_uri,
+            ttl=config.jwks_cache_ttl,
+            http_client=http_client,
+        )
 
     async def verify_token(self, token: str) -> AccessToken | None:
         """Verify one bearer token and return MCP auth info when valid."""
@@ -96,9 +143,16 @@ class JWTBearerTokenVerifier:
 class _JWKSetCache:
     """Small async JWKS cache keyed by kid/alg."""
 
-    def __init__(self, jwks_uri: str, *, ttl: float) -> None:
+    def __init__(
+        self,
+        jwks_uri: str,
+        *,
+        ttl: float,
+        http_client: httpx.AsyncClient | None,
+    ) -> None:
         self.jwks_uri = jwks_uri
         self.ttl = ttl
+        self.http_client = http_client
         self._jwks: dict[str, Any] | None = None
         self._expires_at = 0.0
 
@@ -139,10 +193,13 @@ class _JWKSetCache:
         if self._jwks is not None and not force_refresh and now < self._expires_at:
             return self._jwks
 
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(self.jwks_uri)
-            response.raise_for_status()
-            jwks = response.json()
+        if self.http_client is None:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(self.jwks_uri)
+        else:
+            response = await self.http_client.get(self.jwks_uri)
+        response.raise_for_status()
+        jwks = response.json()
         if not isinstance(jwks, dict):
             raise ValueError("JWKS response is not a JSON object.")
 

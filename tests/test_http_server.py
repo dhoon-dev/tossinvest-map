@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 
+import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -15,7 +16,11 @@ from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from tossinvest_mcp_remote.config import TossInvestRemoteServerConfig
-from tossinvest_mcp_remote.oauth import JWTBearerTokenVerifier, OAuthResourceServerConfig
+from tossinvest_mcp_remote.oauth import (
+    JWTBearerTokenVerifier,
+    OAuthResourceServerConfig,
+    create_mcp_resource_server_auth,
+)
 from tossinvest_mcp_remote.server_http import (
     HTTPServerConfig,
     TrustedForwardedHeadersMiddleware,
@@ -92,6 +97,20 @@ def test_oauth_protected_resource_metadata_is_exposed() -> None:
         "scopes_supported": ["tossinvest:read"],
         "bearer_methods_supported": ["header"],
     }
+
+
+def test_create_mcp_resource_server_auth_returns_fastmcp_inputs() -> None:
+    config = OAuthResourceServerConfig(
+        issuer_url=ISSUER_URL,
+        resource_url=RESOURCE_URL,
+        jwks_uri=JWKS_URI,
+        required_scopes=("tossinvest:read",),
+    )
+
+    mcp_auth = create_mcp_resource_server_auth(config)
+
+    assert mcp_auth.auth_settings == config.auth_settings()
+    assert isinstance(mcp_auth.token_verifier, JWTBearerTokenVerifier)
 
 
 def test_oauth_protects_mcp_route() -> None:
@@ -198,6 +217,32 @@ async def test_jwt_bearer_token_verifier_matches_allowed_email_case_insensitivel
 
     assert access_token is not None
     assert access_token.subject == "owner"
+
+
+@pytest.mark.asyncio
+async def test_jwt_bearer_token_verifier_uses_provided_http_client() -> None:
+    private_key = _rsa_private_key()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=_jwks(private_key))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        verifier = JWTBearerTokenVerifier(
+            OAuthResourceServerConfig(
+                issuer_url=ISSUER_URL,
+                resource_url=RESOURCE_URL,
+                jwks_uri=JWKS_URI,
+                required_scopes=("tossinvest:read",),
+            ),
+            http_client=http_client,
+        )
+
+        access_token = await verifier.verify_token(_jwt(private_key))
+
+    assert access_token is not None
+    assert [request.url for request in requests] == [httpx.URL(JWKS_URI)]
 
 
 def test_origin_validation_rejects_untrusted_origin() -> None:

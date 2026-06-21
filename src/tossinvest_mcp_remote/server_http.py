@@ -17,7 +17,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .config import TossInvestRemoteServerConfig
 from .health import healthz
-from .oauth import JWTBearerTokenVerifier, OAuthResourceServerConfig
+from .oauth import OAuthResourceServerConfig, create_mcp_resource_server_auth
 from .server import create_server
 
 
@@ -40,19 +40,15 @@ def create_http_app(
 ) -> Starlette:
     """Create a Starlette app exposing `/mcp` and `/healthz`."""
     resolved_http_config = http_config or HTTPServerConfig()
-    token_verifier = (
-        JWTBearerTokenVerifier(resolved_http_config.oauth)
+    mcp_auth = (
+        create_mcp_resource_server_auth(resolved_http_config.oauth)
         if resolved_http_config.oauth is not None
         else None
     )
     mcp_server = create_server(
         config,
-        auth=(
-            resolved_http_config.oauth.auth_settings()
-            if resolved_http_config.oauth is not None
-            else None
-        ),
-        token_verifier=token_verifier,
+        auth=mcp_auth.auth_settings if mcp_auth is not None else None,
+        token_verifier=mcp_auth.token_verifier if mcp_auth is not None else None,
     )
     mcp_app = mcp_server.streamable_http_app()
 
